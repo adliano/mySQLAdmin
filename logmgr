@@ -1,0 +1,198 @@
+#!/bin/bash
+#********************************************************
+# Author    : Adriano ALves aalves3
+# Date      : Oct/27/2015
+# File Name : logmgr
+# Objective : HW4 CS155B
+#             This script will enable/disable logs for mySQL
+# with options: for options look at help() function
+#
+#********************************************************
+readonly FILE_NAME="TEST_my.cnf"
+
+
+################## nudge() ####################
+#wake up and read /my.cnf file
+nudge()
+{
+   pid=$(pgrep mysql)
+   kill -1 $pid
+}
+################### help() ####################
+Help()
+{
+   cat <<HELP
+         logmgr [option]... 
+         Options : -b   Enable   binary_log  
+                   -B   Disable  binary_log 
+                   -e   Enable   error_log 
+                   -E   Disable  error_log 
+                   -q   Enable   query_log 
+                   -Q   Disable  query_log 
+                   -s   Enable   slow_query_log 
+                   -S   Disable  slow_query_log 
+                   -d   Display  All logs status (Enable/Disable) 
+                   -h   help 
+HELP
+   exit 0
+}
+############### isBinaryEnable() ##############
+isBinaryEnable()
+{
+   x=$(grep '#log_bin' $FILE_NAME)
+
+    if [ -z "$x" ];then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+############### isErrorEnable() ###############
+isErrorEnable()
+{
+   x=$(grep '#log_error' $FILE_NAME)
+
+    if [ -z "$x" ];then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+############### isQueryEnable() ###############
+isQueryEnable()
+{
+   x=$(grep '#general_log_file' $FILE_NAME)
+
+    if [ -z "$x" ];then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+############### isSlowEnable() ###############
+isSlowEnable()
+{
+   x=$(grep '#log_slow_queries' $FILE_NAME)
+
+    if [ -z "$x" ];then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+############### showStatus() #################
+showStatus()
+{
+   if [ $(isBinaryEnable) = 'true' ];then
+      b="Binary_Logs  Enable" 
+   else
+      b="Binary_Logs  Disable" 
+   fi
+
+   if [ $(isErrorEnable) = 'true' ]; then
+      e="Error_logs  Enable"
+   else
+      e="Error_logs  Disable"
+   fi
+   
+   if [ $(isQueryEnable) = 'true' ]; then
+      q="Query_Logs  Enable"
+   else
+      q="Query_Logs  Disable"
+   fi
+   
+   if [ $(isSlowEnable) = 'true' ]; then
+      s="Slow_Query_Logs  Enable"
+   else
+      s="Slow_Query_Logs  Disable"
+   fi
+
+   echo "*********************************"
+   echo -e "$b\n$e\n$q\n$s\n" | column -t
+   echo "*********************************"
+}
+# boolean variable to void bounce the 
+# the server when NOT necessary
+
+bounce=false
+
+if (($# > 0));then
+   while getopts ":bBdeEhqQsS" opt; do
+     case $opt in
+       #******** binary log *******
+       b)
+          if [ $(isBinaryEnable) = 'false' ];then 
+             sed -i 's/#log_bin/log_bin/g' $FILE_NAME 
+             bounce=true
+          fi
+       ;;
+       B)
+          if [ $(isBinaryEnable) = 'true' ];then
+             sed -i 's/log_bin/#log_bin/g' $FILE_NAME 
+             bounce=true
+          fi
+       ;;
+       #******** display status ********
+       d)
+          showStatus
+       ;;
+       #******** error log ********
+       e)
+          if [ $(isErrorEnable) = 'false' ]; then
+             sed -i 's/#log_error/log_error/' $FILE_NAME 
+             bounce=true
+          fi
+       ;;
+       E)
+          if [ $(isErrorEnable) = 'true' ]; then
+             sed -i 's/log_error/#log_error/' $FILE_NAME 
+             bounce=true
+          fi
+       ;;
+       #******** help ********
+       h)
+          Help 
+       ;;
+       #******** query log ********
+       q) 
+          if [ $(isQueryEnable) = 'false' ]; then
+             sed -i 's/#general_log/general_log/' $FILE_NAME 
+             bounce=true
+          fi
+       ;;
+       Q)
+          if [ $(isQueryEnable) = 'true' ]; then
+             sed -i 's/general_log_file/#general_log_file/' $FILE_NAME 
+             bounce=true
+          fi
+       ;;
+       #******** slow query ********
+       s) 
+          if [ $(isSlowEnable) = 'false' ]; then
+             sed -i 's/#log_slow_queries/log_slow_queries/' $FILE_NAME 
+             bounce=true
+          fi
+       ;;
+       S)
+          if [ $(isSlowEnable) = 'true' ]; then
+             sed -i 's/log_slow_queries/#log_slow_queries/' $FILE_NAME 
+             bounce=true
+          fi
+       ;;
+       #******** invalid command ******
+       \?)
+           echo "Invalid option: -$OPTARG" 
+        ;;
+     esac
+  done
+else
+   echo "INVALID OPTION, use -h for help"
+   exit 1
+fi
+   #******* bouncing server if needed *******
+   if [ "$bounce" = true ];then
+#      nudge
+      echo "Bouncing server"
+   fi 
+#if
+

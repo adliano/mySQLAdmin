@@ -1,0 +1,122 @@
+#!/bin/bash
+# Author    : Adriano Alves
+# Date      : Nov/28/2015
+# File name : makesp
+# Objective : Script to create source code for 
+#             any given stored function/procedure.
+#******************************************************
+
+mysqlpswd="greenLight"
+_file_name="stdout"
+
+#******** help() ********#
+_help()
+{
+   cat <<HELP
+makesp <options> <file name> <database.function/procedure>
+        Options:
+          -d  definer 
+          -f  stored function
+          -h  display help
+          -o  filename default=stdout.
+          -p  stored procedure
+HELP
+exit 0
+}
+#***** domysql() *****#
+_domysql()
+{
+#  mysql -BcNns --disable-pager <<-EOF
+   mysql -BcNns --disable-pager -u root -p$mysqlpswd <<-EOF
+   $@;
+EOF
+}
+#****** die() *******#
+_die()
+{
+   cat <<DIE
+Usage: makesp <options> <file name> <database.function/procedure>
+       use -h for help menu
+DIE
+exit 1
+}
+#************ _db_names() ***********
+#function to return db_name and procedure|function name
+#it will get name like DB.PROCRDURE and return it splited
+_db_names()
+{
+   str=$1
+   IFS='.'
+   array=($str)
+   echo "${array[0]} ${array[1]}"
+}
+          #**** command validate ****
+#*** NO argument ****
+if (($# < 4));then
+   _die
+elif [[ $1 = "-h" || $1 = "-H" ]];then #HELP
+   if (($# == 1));then
+      _help
+   else 
+      _die
+   fi
+else
+   while getopts "fpd:o:" opt; do
+     case $opt in
+     f) _type="FUNCTION"
+        ;;
+     p) _type="PROCEDURE"
+        ;;
+     d) _definer="${OPTARG}%"
+        ;;
+     o) _file_name="${OPTARG}"
+        ;;
+     *) _die
+        ;;
+     esac
+   done
+shift $((OPTIND-1))
+   #check if type exits for especific definer
+if (($# < 1));then
+   _die
+else
+   for args in "$@" 
+   do
+      read db_name stored_name < <(_db_names "$args")
+         query="SELECT COUNT(1) FROM mysql.proc \
+                WHERE db='${db_name}' \
+                AND name='${stored_name}' \
+                AND definer like '${_definer}' \
+                AND type='${_type}'"
+
+      e=$(_domysql "${query}")
+      if [ ${e} -eq 1 ] 
+      then
+          TEMPFILE1=${db_name}_${stored_name}1.temp
+          TEMPFILE2=${db_name}_${stored_name}2.temp
+
+          _domysql "show create ${_type} ${db_name}.${stored_name}\G" > ${TEMPFILE1}
+         #
+         # Remove Top 3 Lines
+         #
+         LINECOUNT=`wc -l < ${TEMPFILE1}`
+         (( LINECOUNT -= 3 ))
+         tail -${LINECOUNT} < ${TEMPFILE1} > ${TEMPFILE2}
+         #
+         # Remove Bottom 3 Lines
+         #
+         LINECOUNT=`wc -l < ${TEMPFILE2}`
+         (( LINECOUNT -= 3 ))
+         head -${LINECOUNT} < ${TEMPFILE2} > ${TEMPFILE1}
+
+         cat ${TEMPFILE1} >> ${_file_name}.sql
+
+      else
+          echo "Stored ${_type} ${db_name}.${stored_name} Does Not Exist"
+      fi
+      rm -f ${TEMPFILE2}
+      rm -f ${TEMPFILE1}
+   done
+ fi
+fi
+

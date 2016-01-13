@@ -1,0 +1,159 @@
+#!/bin/bash
+
+#**********************************************************
+# Author : Adriano Alves (aalves3)
+# Date   : Nov/02/2015
+# File Name : engine_admin
+# Objetive  : (HW5) Script to use with mysql engines
+#**********************************************************
+
+mysqlpswd="youPassWordHere"
+
+###### domysql() ######
+_domysql()
+{
+   mysql -BcNns --disable-pager -u root -p$mysqlpswd <<-EOF
+   $@;
+EOF
+}
+##########_help() ##########
+_help()
+{
+   echo "engine_admin [option] <Engine_Name> <database:table>"
+   echo "Options :"
+   echo " -a Display all Supported Engines"
+   echo " -c <Engine Name> <database:table> change engine of table"
+   echo " -d display default engine"
+   echo " -e <database:table> display engine used on table"
+   echo " -h display this help and exit"
+   echo " -n display not supported engines"
+   exit 0
+}
+########### die() ###########
+_die()
+{
+   echo "USAGE:engine_admin [option] <Engine_Name> <database:table>"
+   echo "engine_admin -h for help"
+   exit 1
+}
+########### isSupported() ############ 
+#function to check if engine is supported
+_isSupported()
+{
+   spt=$(_domysql "SELECT ENGINE FROM INFORMATION_SCHEMA.ENGINES \
+                  where SUPPORT in ('YES','DEFAULT') and ENGINE='$1'")
+   if [ -z $spt ];then
+      echo "false"
+   else
+      echo "true"
+   fi
+}
+############### isDB() ###############
+# function to check if DB exist
+_isDB()
+{
+   db_name=$(_domysql "show databases like '$1'")
+   if [ -z "$db_name" ];then
+      echo "false"
+   else
+      echo "true"
+   fi
+}
+############# isTable() #############
+# function to check if table exist
+_isTable()
+{
+   db_name=$(_domysql "SELECT TABLE_NAME FROM \
+                information_schema.TABLES where TABLE_NAME='$1'")
+   if [ -z "$db_name" ];then
+      echo "false"
+   else
+      echo "true"
+   fi
+}
+################ showEngine ################
+_showEngine()
+{
+   args=$1
+   IFS=:   #split argument by :
+   array=($args)
+
+   if [ $(_isDB ${array[0]}) == 'false' ];then
+      echo " - INVALID Database Name -"
+   else
+      if [ $(_isTable ${array[1]}) == 'false' ];then
+         echo "- INVALID TABLE NAME -"
+      else
+         echo -n "Engine used by table ${array[0]} : "
+         _domysql "SELECT ENGINE FROM information_schema.TABLES \
+                  WHERE TABLE_SCHEMA='${array[0]}' \
+                  AND TABLE_NAME='${array[1]}'"
+      fi 
+   fi
+}
+############### changeEngine() ##############
+# this function will take 2 arguments
+# 1st : Engine name
+# 2nd : DB_name:table
+_changeEngine()
+{
+   args=$2
+   IFS=:   #split argument by :
+   array=($args)
+   #check if database exist
+   if [ $(_isDB ${array[0]}) == 'false' ];then
+      echo " - INVALID Database Name -"
+   else
+      if [ $(_isTable ${array[1]}) == 'false' ];then
+         echo "- INVALID TABLE NAME -"
+      else
+         if [ $(_isSupported $1) == 'false' ];then
+            echo "Engine $1 NOT Supported"
+         else
+            _domysql "USE ${array[0]} ; ALTER TABLE passwd ENGINE = $1"
+         fi
+      fi
+   fi
+}
+
+      ######**** command validate ****######
+
+#*** NO argument ****#
+if (($# == 0));then
+   _die
+#*** options with NO argument ***#
+elif (($# == 1));then
+   #***** option -a ******#
+   if [[ $1 == "-a"  ]];then
+      echo "Supported Engines:"
+      _domysql "SELECT ENGINE FROM INFORMATION_SCHEMA.ENGINES where SUPPORT='YES'"
+   elif [[ $1 == "-d" ]];then
+      echo "Default Engine:"
+      _domysql "SELECT ENGINE FROM INFORMATION_SCHEMA.ENGINES where SUPPORT='DEFAULT'"
+   elif [[ $1 == "-h" ]];then
+      _help
+   elif [[ $1 == "-n" ]];then
+      echo "NOT Supported Engines:"
+      _domysql "SELECT ENGINE FROM INFORMATION_SCHEMA.ENGINES where SUPPORT='NO'"
+   else
+      _die
+   fi
+
+#*** options -e ONE argument ***#
+elif (($# == 2 && $1 == "-e"));then
+   _showEngine $2
+
+#*** options -c TWO arguments ***#
+elif (($# == 3 && $1 == "-c"));then
+   if [ $(_isSupported $2) = 'false' ];then
+      echo "- Engine $2 NOT Supported -"
+      exit 1
+   else
+      _changeEngine $2 $3
+   fi
+else
+   _die
+fi
+
+############## END #################
+
